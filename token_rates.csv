@@ -1,0 +1,4 @@
+provider,model,prompt,completion
+openai,gpt-3.5-turbo,0.0015,0.002
+openai,gpt-4,0.03,0.06
+openai,gpt-4-32k,0.06,0.12
