@@ -124,8 +124,11 @@ class ResearchAgent:
             debug: Whether to enable debug logging
         """
         try:
+            # Store debug setting as instance variable
+            self._debug = debug
+            
             # Configure logging
-            if debug:
+            if self._debug:
                 logger.setLevel(logging.DEBUG)
             else:
                 logger.setLevel(logging.INFO)

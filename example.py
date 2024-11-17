@@ -3,10 +3,10 @@ import logging
 from research_agent import ResearchAgent
 from dotenv import load_dotenv
 
-def setup_logging():
+def setup_logging(level=logging.INFO):
     """Set up logging configuration"""
     logging.basicConfig(
-        level=logging.DEBUG,
+        level=level,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(),  # Output to console
@@ -30,9 +30,13 @@ def setup_logging():
     logging.getLogger('bs4').setLevel(logging.WARNING)
     logging.getLogger('requests').setLevel(logging.WARNING)
 
-def main():
+def main(debug=False):
     # Set up logging first
-    setup_logging()
+    if debug:
+        setup_logging(logging.DEBUG)
+    else:
+        setup_logging(logging.INFO)
+
     logger = logging.getLogger(__name__)
     logger.info("Starting research agent example")
 
@@ -58,7 +62,7 @@ def main():
         agent = ResearchAgent(
             api_key=api_key,
             model_name=model_name,
-            debug=True
+            debug=debug
         )
         
         # Get the path to the test PDF
@@ -86,4 +90,4 @@ def main():
         raise
 
 if __name__ == "__main__":
-    main()
+    main(False)
