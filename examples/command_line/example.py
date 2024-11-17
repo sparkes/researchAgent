@@ -1,6 +1,12 @@
 import os
+import sys
 import logging
 import argparse
+from pathlib import Path
+
+# Add the parent directory to sys.path to allow importing research_agent
+sys.path.append(str(Path(__file__).resolve().parents[2]))
+
 from research_agent import ResearchAgent
 from dotenv import load_dotenv
 
