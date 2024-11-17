@@ -1,5 +1,6 @@
 import os
 import logging
+import argparse
 from research_agent import ResearchAgent
 from dotenv import load_dotenv
 
@@ -30,7 +31,7 @@ def setup_logging(level=logging.INFO):
     logging.getLogger('bs4').setLevel(logging.WARNING)
     logging.getLogger('requests').setLevel(logging.WARNING)
 
-def main(debug=False):
+def main(debug=False, pdf_path=None):
     # Set up logging first
     if debug:
         setup_logging(logging.DEBUG)
@@ -65,11 +66,10 @@ def main(debug=False):
             debug=debug
         )
         
-        # Get the path to the test PDF
-        pdf_path = "./test.pdf"
+        # Validate PDF path
         if not os.path.exists(pdf_path):
-            raise FileNotFoundError(f"Test PDF not found at {pdf_path}")
-        logger.info(f"Found test PDF at {pdf_path}")
+            raise FileNotFoundError(f"PDF not found at {pdf_path}")
+        logger.info(f"Found PDF at {pdf_path}")
 
         # Analyze the paper
         logger.info(f"Starting analysis of {pdf_path}")
@@ -90,4 +90,9 @@ def main(debug=False):
         raise
 
 if __name__ == "__main__":
-    main(False)
+    parser = argparse.ArgumentParser(description='Research Agent Paper Analysis')
+    parser.add_argument('--debug', action='store_true', help='Enable debug mode')
+    parser.add_argument('pdf', type=str, help='Path to the PDF file to analyze')
+    
+    args = parser.parse_args()
+    main(debug=args.debug, pdf_path=args.pdf)
