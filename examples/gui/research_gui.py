@@ -60,7 +60,7 @@ class ResearchGUI:
         console_formatter = logging.Formatter('%(levelname)s: %(message)s')
         
         # Create handlers
-        file_handler = logging.FileHandler(log_file)
+        file_handler = logging.handlers.RotatingFileHandler(log_file, maxBytes=1000000, backupCount=5)
         file_handler.setFormatter(file_formatter)
         
         queue_handler = QueueHandler(self.log_queue)

@@ -4,12 +4,25 @@ A graphical user interface for the ResearchAgent that allows users to analyze PD
 
 ## Features
 
-- File selection dialog for choosing PDF files
+- Modern graphical interface
+- File selection dialog for PDF files
 - Debug mode toggle
-- Tabbed results display for easy reading
-- Progress indication during analysis
-- Error handling with user-friendly messages
-- Detailed logging
+- Real-time progress indication
+- Tabbed results display:
+  - Metadata overview
+  - Validity assessment
+  - Credibility analysis
+  - Retraction status
+  - Counter arguments
+  - Summary
+- Advanced logging system:
+  - Automatic log rotation
+  - 5 files maximum
+  - 1MB per file limit
+  - Timestamped log files
+  - Real-time log display
+- Comprehensive error handling
+- Queue-based log processing
 
 ## Requirements
 
@@ -26,17 +39,28 @@ A graphical user interface for the ResearchAgent that allows users to analyze PD
 
 2. Run the GUI application:
    ```bash
-   python research_gui.py
+   python research_gui.py [--debug]
    ```
 
 3. Using the application:
    - Click "Browse" to select a PDF file
-   - Toggle "Debug Mode" if you want detailed logging
-   - Click "Analyze Paper" to start the analysis
-   - Results will appear in tabs below
-   - Check the log file (research_gui_[timestamp].log) for detailed operation logs
+   - Toggle "Debug Mode" for detailed logging
+   - Click "Analyze Paper" to start analysis
+   - View results in organized tabs
+   - Monitor progress in real-time
+   - Check logs in the logging panel
 
-## Error Handling
+### Logging
+
+- Logs are written to `research_gui_YYYYMMDD_HHMMSS.log`
+- Automatic rotation after 1MB
+- Keeps last 5 log files
+- Debug mode enables verbose logging
+- Production mode shows INFO and above
+- Real-time log display in GUI
+- Third-party library logging is suppressed
+
+### Error Handling
 
 The application includes comprehensive error handling for:
 - Missing environment variables
@@ -44,5 +68,9 @@ The application includes comprehensive error handling for:
 - File not found errors
 - API errors
 - Analysis failures
+- Queue processing errors
 
-All errors are logged and displayed to the user in friendly message boxes.
+All errors are:
+- Logged to rotating log files
+- Displayed in the GUI log panel
+- Shown in user-friendly message boxes

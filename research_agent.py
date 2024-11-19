@@ -408,11 +408,6 @@ class ResearchAgent:
             
             return results
 
-        # First try processing the entire text
-        logger.info(f"Attempting to process entire text of size {len(text)}")
-        if len(text) <= initial_max_size:
-            return [text]  # Return as single chunk if under initial max size
-
         # If that fails or text is too large, split into quarters initially
         logger.info("Splitting text into quarters for initial attempt")
         initial_chunks = split_chunk(text, 4)
@@ -770,6 +765,112 @@ Text to analyze:
             logger.error(f"Error processing input {input_source}: {str(e)}", exc_info=True)
             raise Exception(f"Error processing input {input_source}: {str(e)}")
 
+    def _extract_metadata_with_llm(self, text: str) -> Dict:
+        """Use LLM to extract metadata from paper text through multiple focused queries."""
+        logger.info("Extracting metadata using LLM with multiple queries")
+        
+        # Initialize metadata structure
+        metadata = {
+            'title': '',
+            'authors': [],
+            'abstract': '',
+            'keywords': [],
+            'doi': ''
+        }
+        
+        # Get first 5000 chars for context (usually contains most metadata)
+        context = text[:5000]
+        
+        # Create base system message with context
+        system_context = f"""You are a research paper metadata extractor. You will be asked specific questions about this paper.
+Here is the beginning of the paper for context:
+
+{context}
+
+Answer questions precisely and only provide the specific information requested. If you cannot find the requested information, respond with an empty string or empty list as appropriate."""
+
+        try:
+            # Extract title
+            title_prompt = ChatPromptTemplate.from_messages([
+                ("system", system_context),
+                ("user", "What is the title of this paper? Return ONLY the title text, nothing else. If no title is found, return an empty string.")
+            ])
+            title_response = self._invoke_with_retry(title_prompt.format_messages())
+            if title_response:
+                metadata['title'] = title_response.content.strip()
+            logger.debug(f"Extracted title: {metadata['title']}")
+
+            # Extract authors
+            authors_prompt = ChatPromptTemplate.from_messages([
+                ("system", system_context),
+                ("user", """Who are the authors of this paper? Return ONLY a JSON array of author names, nothing else.
+Example: ["John Smith", "Jane Doe"]
+If no authors are found, return an empty array []""")
+            ])
+            authors_response = self._invoke_with_retry(authors_prompt.format_messages())
+            if authors_response:
+                try:
+                    authors = self._parse_json_response(authors_response.content)
+                    if isinstance(authors, list):
+                        metadata['authors'] = [a.strip() for a in authors if a.strip()]
+                    else:
+                        metadata['authors'] = []
+                except:
+                    # If JSON parsing fails, try to split the response
+                    authors_text = authors_response.content.strip().strip('[]').strip()
+                    if authors_text:
+                        metadata['authors'] = [a.strip().strip('"\'') for a in authors_text.split(',') if a.strip()]
+            logger.debug(f"Extracted authors: {metadata['authors']}")
+
+            # Extract abstract
+            abstract_prompt = ChatPromptTemplate.from_messages([
+                ("system", system_context),
+                ("user", "What is the abstract of this paper? Return ONLY the abstract text, nothing else. If no abstract is found, return an empty string.")
+            ])
+            abstract_response = self._invoke_with_retry(abstract_prompt.format_messages())
+            if abstract_response:
+                metadata['abstract'] = abstract_response.content.strip()
+            logger.debug(f"Extracted abstract: {metadata['abstract'][:100]}...")
+
+            # Extract keywords
+            keywords_prompt = ChatPromptTemplate.from_messages([
+                ("system", system_context),
+                ("user", """What are the keywords of this paper? Return ONLY a JSON array of keywords, nothing else.
+Example: ["machine learning", "artificial intelligence"]
+If no keywords are found, return an empty array []""")
+            ])
+            keywords_response = self._invoke_with_retry(keywords_prompt.format_messages())
+            if keywords_response:
+                try:
+                    keywords = self._parse_json_response(keywords_response.content)
+                    if isinstance(keywords, list):
+                        metadata['keywords'] = [k.strip() for k in keywords if k.strip()]
+                    else:
+                        metadata['keywords'] = []
+                except:
+                    # If JSON parsing fails, try to split the response
+                    keywords_text = keywords_response.content.strip().strip('[]').strip()
+                    if keywords_text:
+                        metadata['keywords'] = [k.strip().strip('"\'') for k in keywords_text.split(',') if k.strip()]
+            logger.debug(f"Extracted keywords: {metadata['keywords']}")
+
+            # Extract DOI
+            doi_prompt = ChatPromptTemplate.from_messages([
+                ("system", system_context),
+                ("user", "What is the DOI of this paper? Return ONLY the DOI string, nothing else. If no DOI is found, return an empty string.")
+            ])
+            doi_response = self._invoke_with_retry(doi_prompt.format_messages())
+            if doi_response:
+                metadata['doi'] = doi_response.content.strip()
+            logger.debug(f"Extracted DOI: {metadata['doi']}")
+
+            logger.info("Successfully extracted metadata using multiple LLM queries")
+            return metadata
+            
+        except Exception as e:
+            logger.error(f"Error extracting metadata with LLM: {str(e)}")
+            return metadata  # Return whatever metadata we managed to extract
+
     def _process_pdf(self, pdf_path: str) -> Dict:
         """Extract text and metadata from PDF file."""
         logger.info(f"Processing PDF: {pdf_path}")
@@ -779,11 +880,15 @@ Text to analyze:
                 raise FileNotFoundError(f"PDF file not found: {pdf_path}")
 
             text = ""
-            metadata = {}
+            raw_metadata = {}
             
             logger.debug("Attempting to extract text with pdfplumber")
             try:
                 with pdfplumber.open(pdf_path) as pdf:
+                    # Extract metadata from pdfplumber
+                    raw_metadata = pdf.metadata or {}
+                    logger.debug(f"Extracted metadata from pdfplumber: {raw_metadata}")
+                    
                     for i, page in enumerate(pdf.pages):
                         logger.debug(f"Processing page {i+1}")
                         extracted_text = page.extract_text()
@@ -796,8 +901,8 @@ Text to analyze:
                 # Fallback to PyPDF2
                 with open(pdf_path, 'rb') as file:
                     reader = PyPDF2.PdfReader(file)
-                    metadata = reader.metadata
-                    logger.debug(f"Extracted metadata: {metadata}")
+                    raw_metadata = reader.metadata or {}
+                    logger.debug(f"Extracted metadata from PyPDF2: {raw_metadata}")
                     
                     # Extract text from each page
                     for i, page in enumerate(reader.pages):
@@ -807,20 +912,72 @@ Text to analyze:
                             text += page_text + "\n"
                 logger.info(f"Successfully extracted {len(text)} characters with PyPDF2")
 
-            if not metadata:
-                logger.debug("Attempting to extract metadata with PyPDF2")
-                try:
-                    with open(pdf_path, 'rb') as file:
-                        reader = PyPDF2.PdfReader(file)
-                        metadata = reader.metadata
-                        logger.debug(f"Successfully extracted metadata: {metadata}")
-                except Exception as e:
-                    logger.error(f"Failed to extract metadata: {str(e)}")
-                    metadata = {}
-
             if not text.strip():
                 logger.error("No text could be extracted from the PDF")
                 raise ValueError("No text could be extracted from the PDF")
+
+            # Initialize metadata structure
+            metadata = {
+                'title': '',
+                'authors': [],
+                'doi': '',
+                'keywords': [],
+                'abstract': '',
+                'creation_date': ''
+            }
+
+            # Try to extract metadata from PDF first
+            if raw_metadata:
+                # Extract title
+                metadata['title'] = (raw_metadata.get('/Title', '') or 
+                                   raw_metadata.get('title', '') or 
+                                   '').strip()
+                
+                # Extract authors
+                authors = (raw_metadata.get('/Author', '') or 
+                         raw_metadata.get('author', '') or 
+                         '')
+                if isinstance(authors, str) and authors.strip():
+                    metadata['authors'] = [a.strip() for a in authors.split(',') if a.strip()]
+                
+                # Extract other metadata
+                metadata['doi'] = (raw_metadata.get('/doi', '') or 
+                                 raw_metadata.get('doi', '') or 
+                                 '').strip()
+                
+                keywords = (raw_metadata.get('/Keywords', '') or 
+                          raw_metadata.get('keywords', '') or 
+                          '')
+                if isinstance(keywords, str) and keywords.strip():
+                    metadata['keywords'] = [k.strip() for k in keywords.split(',') if k.strip()]
+                
+                metadata['creation_date'] = (raw_metadata.get('/CreationDate', '') or 
+                                           raw_metadata.get('creation_date', '') or 
+                                           '').strip()
+
+            # Use LLM to extract or enhance metadata
+            llm_metadata = self._extract_metadata_with_llm(text)
+            
+            # Update metadata with LLM results, preferring non-empty values
+            if llm_metadata:
+                if not metadata['title'] and llm_metadata.get('title'):
+                    metadata['title'] = llm_metadata['title'].strip()
+                
+                if not metadata['authors'] and llm_metadata.get('authors'):
+                    metadata['authors'] = [a.strip() for a in llm_metadata['authors'] if a.strip()]
+                
+                if not metadata['doi'] and llm_metadata.get('doi'):
+                    metadata['doi'] = llm_metadata['doi'].strip()
+                
+                if not metadata['keywords'] and llm_metadata.get('keywords'):
+                    metadata['keywords'] = [k.strip() for k in llm_metadata['keywords'] if k.strip()]
+                
+                if llm_metadata.get('abstract'):
+                    metadata['abstract'] = llm_metadata['abstract'].strip()
+
+            # Ensure we have at least tried to get title and authors
+            if not metadata['title'] or not metadata['authors']:
+                logger.warning("Failed to extract title or authors from both PDF metadata and LLM")
 
             result = {
                 'text': text,
@@ -829,7 +986,7 @@ Text to analyze:
                 'path': pdf_path
             }
             logger.info("Successfully processed PDF")
-            logger.debug(f"Result metadata: {metadata}")
+            logger.debug(f"Final metadata: {metadata}")
             return result
         except Exception as e:
             logger.error(f"Error processing PDF {pdf_path}: {str(e)}", exc_info=True)
@@ -913,11 +1070,16 @@ Text to analyze:
         logger.info("Generating final report")
         
         try:
+            # Get metadata from paper_data
+            metadata = paper_data.get("metadata", {})
+            if not metadata.get("title") and not metadata.get("authors"):
+                logger.warning("Paper metadata is missing title and/or authors")
+
             # Compile all analyses into a structured report
             report = {
                 "metadata": {
-                    "title": paper_data.get("title", "Unknown Title"),
-                    "authors": paper_data.get("authors", []),
+                    "title": metadata.get("title", "Unknown Title"),
+                    "authors": metadata.get("authors", []),
                     "date_analyzed": datetime.now().isoformat(),
                 },
                 "summary": analyses.get("summary", {}),

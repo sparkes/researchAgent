@@ -17,7 +17,7 @@ def setup_logging(level=logging.INFO):
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(),  # Output to console
-            logging.FileHandler('research_agent.log')  # Output to file
+            logging.handlers.RotatingFileHandler('research_agent.log', maxBytes=1000000, backupCount=5)  # Output to file with rotation
         ]
     )
     # Set logging levels for specific modules

@@ -47,7 +47,7 @@ def setup_logging(debug: bool = False):
         level=logging.DEBUG if debug else logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler(log_file),
+            logging.handlers.RotatingFileHandler(log_file, maxBytes=1000000, backupCount=5),
             logging.StreamHandler()
         ]
     )
